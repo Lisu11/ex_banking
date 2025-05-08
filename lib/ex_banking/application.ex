@@ -10,6 +10,12 @@ defmodule ExBanking.Application do
     children = [
       # Starts a worker by calling: ExBanking.Worker.start_link(arg)
       # {ExBanking.Worker, arg}
+      {ExBanking.GateKeeper,
+       if Mix.env() == :test do
+         [name: :fake_name]
+       else
+         []
+       end}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

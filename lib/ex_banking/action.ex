@@ -50,5 +50,4 @@ defmodule ExBanking.Action do
       currency: currency
     }
   end
-
 end
