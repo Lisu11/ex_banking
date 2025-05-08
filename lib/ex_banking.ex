@@ -32,6 +32,8 @@ defmodule ExBanking do
   @doc """
   Increases user’s balance in given currency by amount value
   Returns new_balance of the user in given format
+  Please keep in mind that amount should be given as positive integer that
+  represents cents (e.g. 1000 = $10.00) and similar for other currencies
 
   ## Examples
 
@@ -62,6 +64,8 @@ defmodule ExBanking do
   @doc """
   Decreases user’s balance in given currency by amount value
   Returns new_balance of the user in given format
+  Please keep in mind that amount should be given as positive integer that
+  represents cents (e.g. 1000 = $10.00) and similar for other currencies
 
   ## Examples
 
@@ -91,6 +95,8 @@ defmodule ExBanking do
 
   @doc """
   Returns balance of the user in given format
+  Please keep in mind that returned amount is
+  represented by cents (e.g. 1000 = $10.00) and similar for other currencies
 
   ## Examples
 
@@ -128,6 +134,8 @@ defmodule ExBanking do
   Decreases from_user’s balance in given currency by amount value
   Increases to_user’s balance in given currency by amount value
   Returns balance of from_user and to_user in given format
+  Please keep in mind that amount should be given as positive integer that
+  represents cents (e.g. 1000 = $10.00) and similar for other currencies
 
   ## Examples
 
