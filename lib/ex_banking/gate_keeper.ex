@@ -4,12 +4,13 @@ defmodule ExBanking.GateKeeper do
   """
   use GenServer
   require Logger
+  alias ExBanking.TransactionTask, as: TxTask
 
   @max_operations 10
 
   @impl true
   def init(_) do
-    {:ok, %{users_operations: %{}, refs_to_users: %{}}, {:continue, :init}}
+    {:ok, %{users_operations: %{}, tx_to_users: %{}}, {:continue, :init}}
   end
 
   @impl true
@@ -19,27 +20,35 @@ defmodule ExBanking.GateKeeper do
     {:noreply, state}
   end
 
-  def handle_continue({:fire_tx, run, from, users}, state) do
-    ref = fire_new_task(run, from)
+  def handle_continue({:fire_tx, tx_task}, state) do
+    Logger.debug("Starting transaction task #{inspect(tx_task.mfa)} #{inspect(tx_task.pid)}")
+    TxTask.commit(tx_task)
+    Process.monitor(tx_task.pid)
 
-    {:noreply, update_state_after_transaction(state, users, ref)}
+    {:noreply, state}
+  end
+
+  def handle_continue({:abort_tx, tx_task}, state) do
+    TxTask.rollback(tx_task)
+
+    {:noreply, state}
   end
 
   @impl true
-  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
-    users = Map.get(state.refs_to_users, ref)
+  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+    users = Map.get(state.tx_to_users, pid)
     users_operations = update_users_operations(state, users, &(&1 - 1))
-    refs_to_users = Map.delete(state.refs_to_users, ref)
+    tx_to_users = Map.delete(state.tx_to_users, pid)
 
     if reason in [:normal, :noproc] do
-      Logger.debug("Task #{inspect(ref)} for users #{inspect(users)} finished successfully.")
+      Logger.debug("Task #{inspect(pid)} for users #{inspect(users)} finished successfully.")
     else
       Logger.error(
-        "Task #{inspect(ref)}, with pid #{pid} for users #{users} failed with reason: #{inspect(reason)}"
+        "Task #{inspect(pid)},  for users #{inspect(users)} failed with reason: #{inspect(reason)}"
       )
     end
 
-    {:noreply, %{state | users_operations: users_operations, refs_to_users: refs_to_users}}
+    {:noreply, %{state | users_operations: users_operations, tx_to_users: tx_to_users}}
   end
 
   @impl true
@@ -52,13 +61,14 @@ defmodule ExBanking.GateKeeper do
     end
   end
 
-  def handle_call({:run_action, users, run}, {from, _}, state) do
+  def handle_call({:run_action, users, tx_task}, _, state) do
     users_existance = Enum.map(users, &{&1, user_exists?(&1, state)})
     users_limit = Enum.map(users, &{&1, user_calls_under_limit?(&1, state)})
 
     with {:exist, true} <- {:exist, Enum.all?(users_existance, &elem(&1, 1))},
          {:limit, true} <- {:limit, Enum.all?(users_limit, &elem(&1, 1))} do
-      {:reply, :ok, state, {:continue, {:fire_tx, run, from, users}}}
+      state = update_state_after_transaction(state, users, tx_task.pid)
+      {:reply, {:ok, tx_task}, state, {:continue, {:fire_tx, tx_task}}}
     else
       {:exist, false} ->
         {user, false} = Enum.find(users_existance, &(not elem(&1, 1)))
@@ -77,11 +87,11 @@ defmodule ExBanking.GateKeeper do
   # --------------------------------------------------------------
 
   def run_transaction(actions, opts \\ []) when is_list(actions) do
-    tx_to_run = vault().actions_as_tx(actions)
     users = Enum.map(actions, & &1.user) |> MapSet.new()
     name = Keyword.get(opts, :name, __MODULE__)
+    tx_task = create_new_task(actions)
 
-    GenServer.call(name, {:run_action, users, tx_to_run})
+    GenServer.call(name, {:run_action, users, tx_task})
   end
 
   def create_account(user, opts \\ []) when is_binary(user) do
@@ -102,28 +112,17 @@ defmodule ExBanking.GateKeeper do
   #
   # --------------------------------------------------------------
 
-  defp fire_new_task(fun, from) do
-    {:ok, pid} =
-      Task.start(fn ->
-        try do
-          result = vault().run_transaction(fun)
-          send(from, {:vault, result})
-        rescue
-          e ->
-            Logger.error(Exception.format(:error, e, __STACKTRACE__))
-            send(from, {:vault, :internal_error})
-            reraise e, __STACKTRACE__
-        end
-      end)
+  defp create_new_task(actions) do
+    tx_to_run = vault().actions_as_tx(actions)
 
-    Process.monitor(pid)
+    TxTask.async(fn -> vault().run_transaction(tx_to_run) end)
   end
 
-  defp update_state_after_transaction(state, users, ref) do
+  defp update_state_after_transaction(state, users, pid) do
     %{
       state
       | users_operations: update_users_operations(state, users, &(&1 + 1)),
-        refs_to_users: Map.put_new(state.refs_to_users, ref, users)
+        tx_to_users: Map.put_new(state.tx_to_users, pid, users)
     }
   end
 

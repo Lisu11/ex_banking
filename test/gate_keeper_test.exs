@@ -37,7 +37,7 @@ defmodule GateKeeperTest do
         %ExBanking.Action{user: "john_doe", type: :update, amount: 100, currency: "USD"}
       ]
 
-      assert :ok == GateKeeper.run_transaction(actions)
+      assert {:ok, _task} = GateKeeper.run_transaction(actions)
     end
 
     test "returns error for too many requests to user" do
@@ -45,10 +45,10 @@ defmodule GateKeeperTest do
 
       # Simulate too many requests
       [resp | _] =
-        for _ <- 1..20 do
+        for _ <- 1..200 do
           GateKeeper.run_transaction(tx)
         end
-        |> Enum.reject(&(&1 == :ok))
+        |> Enum.reject(&(elem(&1, 0) == :ok))
 
       assert resp == {:error, :too_many_requests_to_user, "john_doe"}
     end

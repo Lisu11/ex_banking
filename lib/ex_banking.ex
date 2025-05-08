@@ -176,11 +176,10 @@ defmodule ExBanking do
   # --------------------------------------------------------------
 
   defp run_transaction(actions) when is_list(actions) do
-    with :ok <- ExBanking.GateKeeper.run_transaction(actions) do
-      receive do
+    with {:ok, task} <- ExBanking.GateKeeper.run_transaction(actions) do
+      case Task.await(task) do
         {:vault, {:ok, result}} -> {:ok, result}
         {:vault, {:error, reason}} -> {:error, reason}
-        {:vault, :internal_error} -> raise "Internal error"
       end
     end
   end
