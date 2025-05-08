@@ -21,7 +21,6 @@ defmodule ExBanking.GateKeeper do
   end
 
   def handle_continue({:fire_tx, tx_task}, state) do
-    Logger.debug("Starting transaction task #{inspect(tx_task.mfa)} #{inspect(tx_task.pid)}")
     TxTask.commit(tx_task)
     Process.monitor(tx_task.pid)
 
