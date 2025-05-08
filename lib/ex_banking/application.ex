@@ -10,6 +10,7 @@ defmodule ExBanking.Application do
     children = [
       # Starts a worker by calling: ExBanking.Worker.start_link(arg)
       # {ExBanking.Worker, arg}
+      # {Task.Supervisor, name: TxSupervisor},
       {ExBanking.GateKeeper,
        if Mix.env() == :test do
          [name: :fake_name]

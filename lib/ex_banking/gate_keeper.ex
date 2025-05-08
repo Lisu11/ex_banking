@@ -114,6 +114,8 @@ defmodule ExBanking.GateKeeper do
   defp create_new_task(actions) do
     tx_to_run = vault().actions_as_tx(actions)
 
+    # TODO: consider use of Task.Supervisor
+    # Task.Supervisor.async(TxSupervisor, ...
     TxTask.async(fn -> vault().run_transaction(tx_to_run) end)
   end
 
